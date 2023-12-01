@@ -7,8 +7,8 @@ use clap::Parser;
 
 extern crate anyhow;
 
-extern crate onig;
-use onig::Regex;
+extern crate fancy_regex;
+use fancy_regex::Regex;
 
 #[derive(Parser, Debug)]
 pub struct Args {
@@ -62,19 +62,23 @@ fn parse(input: String) -> anyhow::Result<Vec<String>> {
 }
 
 fn process(data: Vec<String>) -> u32 {
+    let pattern = Regex::new("(?=([0-9]|one|two|three|four|five|six|seven|eight|nine))").unwrap();
     data.into_iter()
         .map(|line| {
-            let pattern =
-                Regex::new("(?=([0-9]|one|two|three|four|five|six|seven|eight|nine))").unwrap();
-            for ch in pattern.find_iter(&line) {
-                println!("{:?}", ch);
-            }
-            let captures = pattern.captures_iter(&line).collect::<Vec<_>>();
-            captures.iter().for_each(|c| println!("{:?}", c.at(0)));
+            let mut captures = pattern
+                .captures_iter(&line)
+                .map(|c| c.expect("bad input: unable to find any numbers"))
+                .map(|c| c.get(1));
 
-            let first = captures[0].at(0).unwrap();
-            let last = captures[captures.len() - 1].at(0).unwrap();
-            println!("{}, {}, {}", line, first, last);
+            let first = captures
+                .next()
+                .expect("bad input: unable to find any numbers")
+                .expect("bad input: unable to find any numbers")
+                .as_str();
+            let last = match captures.last() {
+                Some(s) => s.expect("bad input: unable to find any numbers").as_str(),
+                None => first,
+            };
             convert_match_to_digit(first) * 10 + convert_match_to_digit(last)
         })
         .sum()
