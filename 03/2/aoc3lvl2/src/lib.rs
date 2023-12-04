@@ -77,10 +77,10 @@ fn process(input: String) -> anyhow::Result<u32> {
     // regex for finding potential gears
     let pot_gear_pattern = Regex::new(r"\*").unwrap();
 
-    // list of potential gears
+    // list of potential gears (locations with *s)
     let mut potential_gears = Vec::new();
 
-    let linecount = input.lines().count() as i32;
+    let linecount = input.lines().count() as i32; // used to determine if a neighbor is out of bounds
 
     // find gears and record their neighbors
     for (lineno, line) in input.lines().enumerate() {
@@ -106,27 +106,32 @@ fn process(input: String) -> anyhow::Result<u32> {
         }
     }
 
-    // for each number, check if it's by a gear
+    // for each gear, check each number to see if its a neighbor
     // if it is, increment that gear's counters
     for (lineno, line) in input.lines().enumerate() {
         let num_matches = num_pattern.find_iter(line).collect::<Vec<_>>();
-        'gear_loop: for pot_gear in potential_gears.iter_mut() {
-            for num_match in num_matches.iter() {
+        for pot_gear in potential_gears.iter_mut() {
+            'num_loop: for num_match in num_matches.iter() {
                 for colno in num_match.range() {
                     if pot_gear.neighbors.contains(&(lineno, colno)) {
                         pot_gear.neighboring_nums += 1;
                         if pot_gear.neighboring_nums < 3 {
                             pot_gear.ratio *= num_match.as_str().parse::<u32>().unwrap();
                         }
-                        // don't double count the same gear for each digit
-                        continue 'gear_loop
+                        // don't double count the same number on a single gear (once for each digit)
+                        continue 'num_loop;
                     }
                 }
             }
         }
     }
 
-    Ok(potential_gears.into_iter().filter(|gear| gear.neighboring_nums == 2).map(|gear| gear.ratio).sum())
+    // find actual gears (potential gears with only 2 numbers)
+    Ok(potential_gears
+        .into_iter()
+        .filter(|gear| gear.neighboring_nums == 2)
+        .map(|gear| gear.ratio)
+        .sum())
 }
 
 #[derive(Debug)]
