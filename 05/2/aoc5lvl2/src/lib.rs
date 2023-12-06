@@ -36,6 +36,7 @@ impl Config {
     }
 }
 
+/// run our solution
 pub fn run(cfg: Config) -> anyhow::Result<()> {
     // figure out where to get our input from and read it into a string
     let input_string = match cfg.input {
@@ -70,9 +71,9 @@ fn parse(input: String) -> anyhow::Result<(ResourceCollection, HashMap<String, R
 
     // get our inital resource ranges from the seeds
     let seed_ranges = seed_range_caps
-        // split into ranges
+        // split range delimiters
         .chunks(2)
-        // convert to numbers convert to ranges
+        // convert into ResourceRange structures
         .map(|pair| {
             let start = pair[0].parse::<u64>().unwrap();
             let length = pair[1].parse::<u64>().unwrap();
@@ -82,16 +83,17 @@ fn parse(input: String) -> anyhow::Result<(ResourceCollection, HashMap<String, R
         .collect::<Vec<_>>();
 
     let seed_collection = ResourceCollection {
-        name: String::from("seed"),
+        resource_type: String::from("seed"),
         ranges: seed_ranges,
     };
 
     // really gotta figure out throwing errors from closures
+    // get our resource maps
     let maps = sections
         .map(|section| {
             let mut lines = section.lines();
 
-            // what resources are this map converting to/from
+            // what resources does this map converting to/from
             let resource_map_label = lines.next().unwrap();
             let mut resource_name_iter =
                 resource_map_label[..resource_map_label.len() - 1].split("-to-");
@@ -104,18 +106,19 @@ fn parse(input: String) -> anyhow::Result<(ResourceCollection, HashMap<String, R
                 .unwrap()
                 .to_string();
 
-            // convert remaining lines to ranges mappers
+            // convert remaining lines to range mappers
             let mappers = lines
                 .map(|line| {
                     let mut line_iter = line.split_whitespace();
                     let to_start = line_iter.next().unwrap().parse::<u64>().unwrap();
                     let from_start = line_iter.next().unwrap().parse::<u64>().unwrap();
                     let length = line_iter.next().unwrap().parse::<u64>().unwrap();
+                    let from_end = from_start + length - 1; // inclusive
 
-                    ResourceMapRange {
+                    RangeMapper {
                         from_start,
+                        from_end,
                         to_start,
-                        length,
                     }
                 })
                 .collect::<Vec<_>>();
@@ -131,8 +134,8 @@ fn parse(input: String) -> anyhow::Result<(ResourceCollection, HashMap<String, R
 /// given our seeds and maps, convert our seeds all the way to locations
 fn process(seeds: ResourceCollection, maps: HashMap<String, ResourceMap>) -> u64 {
     let mut cur_collection = seeds;
-    while cur_collection.name != "location" {
-        let cur_target = &cur_collection.name;
+    while cur_collection.resource_type != "location" {
+        let cur_target = &cur_collection.resource_type;
         cur_collection = maps[cur_target].convert_resource_collection(cur_collection);
     }
 
@@ -145,7 +148,7 @@ fn process(seeds: ResourceCollection, maps: HashMap<String, ResourceMap>) -> u64
         .unwrap()
 }
 
-/// a resource that we're converting
+// represent a range of ids for a resource
 struct ResourceRange {
     // start and end are inclusive
     start: u64,
@@ -154,21 +157,24 @@ struct ResourceRange {
 
 /// a collection of resources of the same type represented by ranges
 struct ResourceCollection {
-    name: String,
+    // resource type could be an enum since we know what they all are
+    // really it doesn't matter too much though and this way we can handle
+    // arbitrary resource types (idk what they all are right now anyway and I don't need to)
+    resource_type: String,
     ranges: Vec<ResourceRange>,
 }
 
-/// a map for converting from one resource to another
+/// a map for converting from one resource collection to another
 struct ResourceMap {
-    from: String,
-    to: String,
-    mappers: Vec<ResourceMapRange>,
+    from: String, // resource the map can convert collections from
+    to: String,   // resource the map convert collections into
+    mappers: Vec<RangeMapper>,
 }
 
 impl ResourceMap {
-    // given a vector of resource ranges of the 'from' type, convert them all to ranges of the 'to' type
+    // given a resource collection of the 'from' type, convert them all to ranges of the 'to' type
     fn convert_resource_collection(&self, r_collection: ResourceCollection) -> ResourceCollection {
-        if r_collection.name != self.from {
+        if r_collection.resource_type != self.from {
             panic!("attempt to use resourcemap on a resourcecollection it can't convert");
         }
         // ranges that have been converted to the new type
@@ -202,24 +208,24 @@ impl ResourceMap {
         // premature optimization and all that jazz
         // update: we got away without it but I'm keeping the comment so I look smart
         ResourceCollection {
-            name: self.to.clone(),
+            resource_type: self.to.clone(),
             ranges: converted_ranges,
         }
     }
 }
 
-/// an individual range in a resource map
-struct ResourceMapRange {
+/// a structure used to convert one resource range into another, using its own range
+struct RangeMapper {
+    // all range values here are inclusive
     from_start: u64,
+    from_end: u64,
     to_start: u64,
-    length: u64,
 }
-impl ResourceMapRange {
+impl RangeMapper {
     /// given a resource range, check if it has overlap with this mapping (aka if this mapping needs to be used on it)
     fn has_overlap(&self, r_range: &ResourceRange) -> bool {
-        let from_end = self.from_start + self.length - 1;
-        (self.from_start <= r_range.start && r_range.start <= from_end)
-            || (self.from_start <= r_range.end && r_range.end <= from_end)
+        (self.from_start <= r_range.start && r_range.start <= self.from_end)
+            || (self.from_start <= r_range.end && r_range.end <= self.from_end)
     }
 
     /// given a resource range with overlap, convert it into one resource range of the new type and 0, 1, or 2 smaller ranges of the original type
@@ -231,9 +237,6 @@ impl ResourceMapRange {
             panic!("Called convert_resource_range on a maprange and resourcerange that are incompatible")
         }
         let mut old_type_ranges = Vec::new();
-        // inclusive
-        let from_end = self.from_start + self.length - 1;
-
         // start of the range we can convert to the new type
         let convertible_start;
         // check if there's overflow at the start of the resource range that we can't convert (if there is, it becomes an old type range)
@@ -249,10 +252,10 @@ impl ResourceMapRange {
 
         // check if there's overflow at the end of the resource range we can't convert (if there is, it becomes an old type range)
         let convertible_end;
-        if from_end < r_range.end {
-            convertible_end = from_end;
+        if self.from_end < r_range.end {
+            convertible_end = self.from_end;
             old_type_ranges.push(ResourceRange {
-                start: from_end + 1,
+                start: self.from_end + 1,
                 end: r_range.end,
             });
         } else {
