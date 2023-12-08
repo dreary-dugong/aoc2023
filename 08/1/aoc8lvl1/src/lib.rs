@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
@@ -46,20 +47,72 @@ pub fn run(cfg: Config) -> anyhow::Result<()> {
         }
     };
 
-    let data = parse(input_string)?;
-    let result = process(data);
+    let (directions, graph) = parse(input_string)?;
+    let result = process(directions, graph);
 
     println!("{}", result);
 
     Ok(())
 }
 
-fn parse(input: String) -> anyhow::Result<String> {
-    // remember to change the return type
-    todo!()
+/// parse input into a vector of directions and a hashmap associating labels with nodes
+fn parse(input: String) -> anyhow::Result<(Vec<Direction>, HashMap<String, Node>)> {
+    // graphs in rust are hard but this one isn't awful yet
+    let mut line_iter = input.lines();
+    let direction_line = line_iter
+        .next()
+        .ok_or(anyhow::anyhow!("empty input file"))?;
+    let directions = direction_line
+        .chars()
+        .map(|c| match c {
+            'L' => Direction::Left,
+            'R' => Direction::Right,
+            _ => panic!(
+                "invalid character in direction list; I still can't return errors from closures"
+            ),
+        })
+        .collect::<Vec<Direction>>();
+
+    line_iter
+        .next()
+        .ok_or(anyhow::anyhow!("missing line after input line"))?;
+
+    let graph = line_iter
+        .map(|line| {
+            let label = line[0..=2].to_string();
+            let left = line[7..=9].to_string();
+            let right = line[12..=14].to_string();
+            Node { label, left, right }
+        })
+        .map(|node| (node.label.clone(), node))
+        .collect::<HashMap<String, Node>>();
+
+    Ok((directions, graph))
 }
 
-fn process(data: String) -> u32 {
-    // remember to change the param type
-    todo!()
+fn process(directions: Vec<Direction>, graph: HashMap<String, Node>) -> u32 {
+    let mut cur_node = graph.get("AAA").expect("invalid graph");
+    let mut direction_iter = directions.into_iter().cycle();
+    let mut num_steps = 0;
+    while cur_node.label != "ZZZ" {
+        cur_node = match direction_iter.next().unwrap() {
+            Direction::Left => graph.get(&cur_node.left).expect("Missing node in graph"),
+            Direction::Right => graph.get(&cur_node.right).expect("Missing node in graph"),
+        };
+        num_steps += 1;
+    }
+
+    num_steps
+}
+
+#[derive(Clone, Copy)]
+enum Direction {
+    Left,
+    Right,
+}
+#[derive(Debug)]
+struct Node {
+    label: String,
+    left: String,
+    right: String,
 }
