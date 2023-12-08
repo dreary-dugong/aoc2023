@@ -59,6 +59,7 @@ pub fn run(cfg: Config) -> anyhow::Result<()> {
 fn parse(input: String) -> anyhow::Result<(Vec<Direction>, HashMap<String, Node>)> {
     // graphs in rust are hard but this one isn't awful yet
     let mut line_iter = input.lines();
+    // parse directions
     let direction_line = line_iter
         .next()
         .ok_or(anyhow::anyhow!("empty input file"))?;
@@ -73,10 +74,12 @@ fn parse(input: String) -> anyhow::Result<(Vec<Direction>, HashMap<String, Node>
         })
         .collect::<Vec<Direction>>();
 
+    // skip blank line
     line_iter
         .next()
         .ok_or(anyhow::anyhow!("missing line after input line"))?;
 
+    // contstruct graph by taking character indices
     let graph = line_iter
         .map(|line| {
             let label = line[0..=2].to_string();
@@ -94,6 +97,7 @@ fn process(directions: Vec<Direction>, graph: HashMap<String, Node>) -> u32 {
     let mut cur_node = graph.get("AAA").expect("invalid graph");
     let mut direction_iter = directions.into_iter().cycle();
     let mut num_steps = 0;
+    // traverse graph until we find our target, counting steps
     while cur_node.label != "ZZZ" {
         cur_node = match direction_iter.next().unwrap() {
             Direction::Left => graph.get(&cur_node.left).expect("Missing node in graph"),
