@@ -54,12 +54,35 @@ pub fn run(cfg: Config) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn parse(input: String) -> anyhow::Result<String> {
-    // remember to change the return type
-    todo!()
+/// read input and parse into sequences of numbers
+fn parse(input: String) -> anyhow::Result<Vec<Vec<i32>>> {
+    Ok(input
+        .lines()
+        .map(|line| {
+            line.split_whitespace()
+                .map(|n| n.parse::<i32>().unwrap())
+                .collect::<Vec<i32>>()
+        })
+        .collect())
 }
 
-fn process(data: String) -> u32 {
-    // remember to change the param type
-    todo!()
+/// find the sum of next numbers per sequence
+fn process(data: Vec<Vec<i32>>) -> i32 {
+    data.into_iter()
+        .map(|sequence| {
+            let mut sum_of_lasts = 0;
+            let mut cur_seq = sequence;
+            // make new sequences until we have one of all zeroes
+            while cur_seq.iter().filter(|n| **n == 0).count() != cur_seq.len() {
+                sum_of_lasts += cur_seq.last().unwrap();
+                cur_seq = cur_seq[1..]
+                    .iter()
+                    .zip(cur_seq[0..cur_seq.len() - 1].iter())
+                    .map(|(l, s)| l - s)
+                    .collect()
+            }
+
+            sum_of_lasts
+        })
+        .sum()
 }
